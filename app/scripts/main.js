@@ -28,14 +28,14 @@
 
     cameraManager.onframe = function() {
       // There is a frame in the camera, what should we do with it?
- 
+
       var imageData = cameraManager.getImageData();
       var detectedQRCode = qrCodeManager.detectQRCode(imageData, function(url) {
         if(url !== undefined) {
           qrCodeManager.showDialog(url);
         }
       });
-    
+
     };
   };
 
@@ -52,16 +52,35 @@
 
     this.currentUrl = undefined;
 
+    if (window.Worker) { //check workers supported in browser
+      var qrWorker = new Worker('scripts/jsqrcode/qrworker.js');
+    }
 
     this.detectQRCode = function(imageData, callback) {
       callback = callback || function() {};
+      if (window.Worker) {
 
-      client.decode(imageData, function(result) {
-        if(result !== undefined) {
-          self.currentUrl = result;
-        }
-        callback(result);
-      });
+        qrWorker.onmessage = function(result) { //Prepare for response from worker
+          var url = result.data;
+          if(url !== undefined) {
+            self.currentUrl = url;
+          }
+          callback(url);
+        };
+
+        //Send data to Worker
+        qrWorker.postMessage(imageData);
+
+      }
+      else {
+        //Browser doesn't support Workers
+        client.decode(imageData, function(result) {
+          if(result !== undefined) {
+            self.currentUrl = result;
+          }
+          callback(result);
+        });
+      }
     };
 
     this.showDialog = function(url) {
@@ -105,7 +124,7 @@
 
     // Variables
     var dWidth;
-    var dHeight; 
+    var dHeight;
     var dx = 0;
     var dy = 0;
 
@@ -150,19 +169,19 @@
         overlayCoords.height = cameraCanvas.height - (boxHeightSize * 2);
 
       }
-     
+
     };
 
     var setupVariables = function(e) {
       dWidth = cameraCanvas.width = window.innerWidth;
-      dHeight = cameraCanvas.height = window.innerHeight; 
+      dHeight = cameraCanvas.height = window.innerHeight;
       dx = 0;
       dy = 0;
 
       sx = 0;
       sy = 0;
 
-      // Make the video coordinate space the same as the window. 
+      // Make the video coordinate space the same as the window.
       // size in the longest dimension.
       // Then center and clip. and map back to correct space.
       scaleX = (dWidth / cameraVideo.videoWidth);
@@ -172,7 +191,7 @@
       // Trim the left
       sx = ((cameraVideo.videoWidth * scaleFactor) / 2) - (dWidth/ 2);
       sy = ((cameraVideo.videoHeight * scaleFactor) / 2) - (dHeight / 2);
-     
+
       // Trim the right.
       sWidth = (cameraVideo.videoWidth * scaleFactor) - sx * 2;
       sHeight = (cameraVideo.videoHeight * scaleFactor) - sy * 2;
@@ -207,19 +226,19 @@
 
       if(videoSource === undefined && cameras.length == 0) {
         // Because we have no source information, have to assume it user facing.
-        params = { video: true }; 
+        params = { video: true };
       }
       else {
         params = { video: { optional: [{sourceId: videoSource.id}] } };
       }
-  
+
       gUM.call(navigator, params, function(theStream) {
         localStream = theStream;
-        
+
         cameraVideo.onloadeddata = function(e) {
 
           coordinatesHaveChanged = true;
-          
+
           var isSetup = setupVariables(e);
           if(isSetup) {
             requestAnimationFrame(captureFrame.bind(self));
@@ -237,7 +256,7 @@
           // The video is ready, and the camerea captured
           if(videoSource === undefined) {
             // There is no meta data about the camera, assume user facing.
-            videoSource = { 
+            videoSource = {
               'facing': 'user'
             };
           }
@@ -328,7 +347,7 @@
     });
 
     // Init
-    getSources(function() { 
+    getSources(function() {
       // On first run, select the first camera.
       getCamera(cameras[0], toggleFacingState);
     });
